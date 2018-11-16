@@ -1,5 +1,7 @@
 package crazyflie.web;
 
+import haxe.Timer;
+import js.Browser.console;
 import js.Browser.document;
 import js.Browser.navigator;
 import js.Browser.window;
@@ -10,13 +12,19 @@ import js.html.DataView;
 import js.html.Element;
 import js.html.DivElement;
 import js.html.Gamepad;
-import haxe.Timer;
+import crazyflie.Test;
 
 class App {
 
 	static var radio : Crazyradio;
 	static var gamepad : Gamepad;
+	static var flightControl : FlightControl;
+
 	static var logElement : Element;
+	static var thrustElement : Element;
+	static var yawElement : Element;
+	static var pitchElement : Element;
+	static var rollElement : Element;
 
 	static function update() {
 
@@ -25,6 +33,7 @@ class App {
 			for( gp in gamepads ) {
 				if( gp != null ) {
 					gamepad = gp;
+					log( 'Gamepad connected [${gamepad.id}]' );
 					break;
 				}
 			}
@@ -36,91 +45,78 @@ class App {
 		var thrust = 0;
 
 		if( gamepad != null ) {
-			roll = gamepad.axes[2] * 30;
-	    	pitch = gamepad.axes[3] * 30;
-	    	yaw = gamepad.axes[0] * 200;
 			thrust = Std.int( gamepad.axes[1] * - 55000 );
+			yaw = gamepad.axes[0] * 200;
+			pitch = gamepad.axes[3] * 30;
+			roll = gamepad.axes[2] * 30;
 		}
 
 		if( thrust < 500 ) thrust = 0;
 
-		//info.textContent = ''+thrust;
+		//thrust = Math.min( thrust, flightControl.maxThrust );
+		yaw = Math.min( yaw, flightControl.maxYaw );
 
-		radio.sendSetpoint( roll, pitch, yaw, thrust );
-	}
+		//log( roll+' '+pitch+' '+yaw+' '+thrust );
 
-	static function rampMotors() {
+		thrustElement.textContent = 'Thrust: $thrust';
+		yawElement.textContent = 'Yaw: $yaw';
+		pitchElement.textContent = 'Pitch: $pitch';
+		rollElement.textContent = 'Roll: $roll';
 
-		var roll = 0.0;
-		var pitch = 0.0;
-		var yaw = 0.0;
-		var thrust = 20000;
-		var thrust_mult = 1;
-		var thrust_step = 500;
-
-		radio.sendSetpoint( 0, 0, 0, 0 );
-
-		var timer = new Timer( 30 );
-		timer.run = function(){
-
-			trace(thrust);
+		if( radio != null ) {
 			radio.sendSetpoint( roll, pitch, yaw, thrust );
-			if( thrust >= 25000 )
-				thrust_mult = -1;
-			thrust += thrust_step * thrust_mult;
-			if( thrust < 20000 ) {
-				trace( "end" );
-				timer.stop();
-				radio.sendSetpoint( 0, 0, 0, 0 );
-
-				Timer.delay( function() {
-					radio.close().then( function(e){
-						trace("DONE");
-					});
-				}, 100 );
-			}
 		}
 	}
 
 	static function log( msg : String ) {
-		var now = Date.now();
-		var time = now.getHours()+':'+now.getMinutes()+':'+now.getSeconds();
+		console.log( msg );
+		var time = DateTools.format( Date.now(), "%H:%M:%S" );
 		logElement.textContent += '[$time] '+msg+'\n';
+		logElement.scrollTop = logElement.scrollHeight;
 	}
 
 	static function main() {
 
-		window.onload = function(){
+		window.onload = function() {
+
+			flightControl = new FlightControl();
 
 			logElement = document.getElementById( 'log' );
 
-			log( "Searching radio devices ..." );
+			var inputElement = document.getElementById( 'input' );
+			thrustElement = inputElement.querySelector( '.thrust' );
+			yawElement = inputElement.querySelector( '.yaw' );
+			pitchElement = inputElement.querySelector( '.pitch' );
+			rollElement = inputElement.querySelector( '.roll' );
+
+			var timer = new Timer( 30 );
+			timer.run = update;
+
+			log( "Searching radio devices …" );
 
 			Crazyradio.findDevices().then( function(devices:Array<USBDevice>) {
 				if( devices.length == 0 ) {
-					//info.textContent = 'No crazyradio device found';
+					log( 'No crazyradio device found' );
 				} else {
 					for( dev in devices ) {
 						var btn = document.createButtonElement();
 						btn.textContent = 'RADIO [${dev.serialNumber}]';
-						document.body.appendChild( btn );
+						document.getElementById( 'devices' ).appendChild( btn );
 						btn.onclick = function(){
 							radio = new Crazyradio( dev );
 							radio.open().then( function(_){
 								log( "Radio connected" );
 								btn.classList.add( 'connected' );
+								btn.onclick = function(){
+									radio.close();
+									btn.classList.remove( 'connected' );
+								}
 								radio.scanChannel(80).then( function(_){
 									trace(">");
 									//rampMotors();
-									var timer = new Timer( 30 );
-									timer.run = update;
+									//var timer = new Timer( 30 );
+									//timer.run = update;
 								});
-								/*
-								radio.setChannel(80).then( function(_){
-									trace(">");
-									//rampMotors();
-								});
-								*/
 							});
 						}
 					}

@@ -3,15 +3,25 @@ body {
 	margin: 0;
 }
 
+#devices {
+	padding: 5px;
+}
+
+#input {
+	padding: 5px;
+}
+
 #log {
+	overflow-y: scroll;
 	white-space: pre;
 	position: fixed;
+	left: 0;
 	right: 0;
-	top: 0;
 	bottom: 0;
+	padding: 5px;
 	background: #000;
 	color: #fff;
-	min-width: 100px;
+	max-height: 400px;
 	font-family: monospace;
 }
 

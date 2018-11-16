@@ -48,26 +48,20 @@ class Crazyradio {
 		return device.open()
 			.then( r -> return device.selectConfiguration(1) )
 			.then( r -> return device.claimInterface(0) )
-			.then( r -> return setAddress() )
+		//	.then( r -> return setAddress() )
 			.then( r -> return setDataRate( KPS250 ) )
-			.then( r -> return setACKEnable( true ) );
+			.then( r -> return setACKEnable( true ) )
 		//	.then( r -> return setChannel( 2 ) )
 		//	.then( r -> return setContCarrier( false ) )
 		//	.then( r -> return setPower( P_0DBM ) )
-		//	.then( r -> return setARC( 3 ) )
-		//	.then( r -> return setARDBytes( 32 ) );
+			.then( r -> return setARC( 3 ) )
+			.then( r -> return setARDBytes( 32 ) );
 	}
 
 	public function close() : Promise<Dynamic> {
-		return device.releaseInterface(0).then( function(){
-			return device.reset();
-			/*
-			return device.releaseInterface(0).then( function(){
-				trace("releaseInterface");
-				return device.close();
-			});
-			*/
-		});
+		return device.releaseInterface(0)
+			.then( device.reset() )
+			.then( device.close() );
 	}
 
 	public function scanChannel( channel : Int ) {
@@ -76,7 +70,6 @@ class Crazyradio {
 			var view = new DataView( buf );
 			view.setUint8( 0, 0xFF );
 			sendPacket( buf ).then( function(r){
-				//trace(r );
 				var decoder = new js.html.TextDecoder();
 				console.log(decoder.decode(r.data));
 			});
@@ -120,9 +113,8 @@ class Crazyradio {
 		return sendVendorSetup( SET_CONT_CARRIER, active ? 1 : 0, 0 );
 	}
 
-	//function setAddress( address : Int ) {
-	public function setAddress() : Promise<USBOutTransferResult> {
-		return sendVendorSetup( SET_RADIO_ADDRESS, 0, 0 );
+	public function setAddress( address : Int ) : Promise<USBOutTransferResult> {
+		return sendVendorSetup( SET_RADIO_ADDRESS, address, 0 );
 	}
 
 	public function setPower( power : Power ) : Promise<USBOutTransferResult> {
@@ -139,6 +131,24 @@ class Crazyradio {
 
 	public function setACKEnable( enable : Bool ) : Promise<USBOutTransferResult> {
 		return sendVendorSetup( ACK_ENABLE, enable ? 1 : 0, 0 );
+	}
+
+	public function sendSetpoint( roll : Float, pitch : Float, yaw : Float, thrust : Int ) : Promise<USBOutTransferResult> {
+		var buf = new ArrayBuffer( 15 );
+    	var view = new DataView( buf );
+		view.setUint8( 0, 0x30 );      // CRTP header
+	    view.setFloat32( 1, roll, true );
+	    view.setFloat32( 5, pitch, true );
+	    view.setFloat32( 9, yaw, true );
+	    view.setUint16( 13, thrust, true );
+		return sendPacket( buf );
+	}
+
+	public function sendPacket( data : ArrayBuffer ) : Promise<USBOutTransferResult> {
+		return device.transferOut( 0x01, data )
+			.then( function(r){
+				return device.transferIn( 1, 64 );
+			});
 	}
 
 	function sendVendorSetup( request : Int, value : Int, index : Int, ?data : ArrayBuffer ) : Promise<USBOutTransferResult> {
@@ -160,40 +170,6 @@ class Crazyradio {
 			value: value,
 			index: index,
 		}, length );
-	}
-
-	public function sendSetpoint( roll : Float, pitch : Float, yaw : Float, thrust : Int ) : Promise<USBOutTransferResult> {
-		var buf = new ArrayBuffer( 15 );
-    	var view = new DataView( buf );
-		view.setUint8( 0, 0x30 );      // CRTP header
-	    view.setFloat32( 1, roll, true );
-	    view.setFloat32( 5, pitch, true );
-	    view.setFloat32( 9, yaw, true );
-	    view.setUint16( 13, thrust, true );
-		return sendPacket( buf );
-	}
-
-	public function sendPacket( data : ArrayBuffer ) : Promise<USBOutTransferResult> {
-		return device.transferOut( 0x01, data ).then( function(r){
-			//console.debug( r );
-			return device.transferIn( 1, 64 );
-			/*
-			return device.transferIn( 1, 64 ).then( function(r){
-				return r.data;
-				console.debug( r );
-				//var ack = new Uint8Array( r.data );
-				//trace( ack );
-				var decoder = new js.html.TextDecoder();
-				console.log('Received: ' + decoder.decode(r.data));
-
-				//return false; //r.data.getUint8() == 0;
-				//trace(r.data.getUint8());
-				//var ack = new Uint8Array(r.data);
-				//trace(ack);
-				//trace(ack.buffer);
-			});
-			*/
-		});
 	}
 
 	public static function findDevices() : Promise<Array<USBDevice>> {
